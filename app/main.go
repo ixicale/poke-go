@@ -3,15 +3,22 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+
 	"net/http"
+
+	// "github.com/aws/aws-lambda-go/events"
+	// "github.com/aws/aws-lambda-go/lambda"
 
 	"github.com/gin-gonic/gin"
 )
 
 const DNS = "https://pokeapi.co"
 
+// var ginLambda *ginadapter.GinLambda
+
 func main() {
-	router := gin.Default()
+	router := gin.New()
 	router.GET("/pokemons", func(c *gin.Context) {
 		pokemons := GetAllPokemons()
 
@@ -24,16 +31,31 @@ func main() {
 
 	router.GET("/pokemons/:name", func(c *gin.Context) {
 		name := c.Param("name")
-		data := getPokemonByName(name)
 
-		c.JSON(http.StatusOK, gin.H{
-			"status":  http.StatusOK,
-			"message": "Pokemon",
+		reqStatus := http.StatusOK
+		data := getPokemonByName(name)
+		var message string
+		// check if name is number
+		if _, err := strconv.Atoi(name); err == nil {
+			reqStatus = http.StatusBadRequest
+			message = "Name must be a string"
+			data = nil
+		} else if data == nil && reqStatus == http.StatusOK {
+			reqStatus = http.StatusNotFound
+			message = fmt.Sprintf("Pokemon '%s' not found", name)
+		} else {
+			message = fmt.Sprintf("Pokemon %s", name)
+		}
+
+		c.JSON(reqStatus, gin.H{
+			"status":  reqStatus,
+			"message": message,
 			"data":    data,
 		})
 	})
 
 	router.Run()
+	// ginLambda = ginadapter.New(router)
 }
 
 func make_request(sufix string) (map[string]interface{}, error) {
