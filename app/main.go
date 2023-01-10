@@ -1,25 +1,31 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 
 	"net/http"
 
-	// "github.com/aws/aws-lambda-go/events"
-	// "github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
+
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 )
 
 const DNS = "https://pokeapi.co"
 
-// var ginLambda *ginadapter.GinLambda
-
 func main() {
+	// LOCAL_DEBUG is true when AWS_EXECUTION_ENV is empty
+	LOCAL_DEBUG := reflect.DeepEqual(os.Getenv("AWS_EXECUTION_ENV"), "")
+
 	router := gin.New()
-	router.GET("/pokemons", func(c *gin.Context) {
+	router.GET("/pokemon", func(c *gin.Context) {
 		pokemons := GetAllPokemons()
 
 		c.JSON(http.StatusOK, gin.H{
@@ -29,21 +35,23 @@ func main() {
 		})
 	})
 
-	router.GET("/pokemons/:name", func(c *gin.Context) {
+	router.GET("/pokemon/:name", func(c *gin.Context) {
 		name := c.Param("name")
 
 		reqStatus := http.StatusOK
 		data := getPokemonByName(name)
 		var message string
-		// check if name is number
 		if _, err := strconv.Atoi(name); err == nil {
+			// check if name is number
 			reqStatus = http.StatusBadRequest
 			message = "Name must be a string"
 			data = nil
 		} else if data == nil && reqStatus == http.StatusOK {
+			// check if pokemon exists
 			reqStatus = http.StatusNotFound
 			message = fmt.Sprintf("Pokemon '%s' not found", name)
 		} else {
+			// pokemon exists
 			message = fmt.Sprintf("Pokemon %s", name)
 		}
 
@@ -54,8 +62,18 @@ func main() {
 		})
 	})
 
-	router.Run()
-	// ginLambda = ginadapter.New(router)
+	if LOCAL_DEBUG {
+		router.Run()
+	} else {
+		ginLambda = ginadapter.New(router)
+		lambda.Start(handler)
+	}
+}
+
+var ginLambda *ginadapter.GinLambda
+
+func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	return ginLambda.ProxyWithContext(ctx, request)
 }
 
 func make_request(sufix string) (map[string]interface{}, error) {
