@@ -32,14 +32,24 @@ export class CdkStack extends cdk.Stack {
     const api = new apigateway.RestApi(this, "pokeapi", {
       restApiName: "PokeAPI",
       description: "This service serves the PokeAPI",
+      deployOptions: {
+        stageName: "dev",
+      }
     });
 
     const integration = new apigateway.LambdaIntegration(testLambda, {
       proxy: true,
-      integrationResponses: [{ statusCode: "200" }]
+      // integrationResponses: [{ statusCode: "200" }]
     });
 
-    api.root.addMethod("GET", integration);
+    api.root.addProxy({
+      defaultIntegration: integration,
+      defaultMethodOptions: {
+        // authorizationType: apigateway.AuthorizationType.NONE,
+        // apiKeyRequired: false,
+      },
+      anyMethod: true,
+    })
 
 
     // example resource
